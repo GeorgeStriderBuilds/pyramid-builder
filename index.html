@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pyramid Builder — A George &amp; Strider collab</title>
+<title>Pyramid Builder: A George &amp; Strider collab</title>
 <style>
   *{box-sizing:border-box}
   html{background:#d9b878}
@@ -46,6 +46,7 @@
   .mile{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0;padding:0;list-style:none}
   .mile li{border:2px solid #b9972f;border-radius:20px;padding:6px 12px;font-size:13px;background:#f7ead0}
   .mile li.done{background:linear-gradient(#e8c766,#c9a227);font-weight:bold}
+  .mile li .msub{display:block;font-size:12px;color:#6b4f1d;font-weight:normal}
   .upg{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin:10px 0;padding:10px 0;border-top:1px solid #d9c49a}
   .upg:first-of-type{border-top:0}
   .upg .desc{grid-column:span 2;font-size:13px;color:#6b4f1d;margin-top:-6px}
@@ -90,18 +91,18 @@
   </section>
 
   <section class="panel" id="yearPanel">
-    <h2 id="yearTitle">Year 1 — The Nile rises</h2>
+    <h2 id="yearTitle">Year 1: The Nile rises</h2>
     <p id="floodText"></p>
     <div id="eventBox"></div>
     <div id="specialBox" style="display:none"></div>
     <div id="allocBox" style="display:none">
       <p><b>Send your workers.</b> You have <b id="allocTotal">100</b> workers. Unassigned workers rest at home.</p>
       <div id="allocRows"></div>
-      <p>Unassigned: <b id="allocLeft">0</b> workers</p>
+      <p>Unassigned: <b id="allocLeft" aria-live="polite">0</b> workers</p>
       <div class="btnrow"><button class="big" id="confirmBtn">Continue to workshop</button></div>
     </div>
     <div id="workshopBox" style="display:none">
-      <p><b>Workshop — invest stone in better tools.</b> Each level costs stone now and helps every year after. You may buy more than one upgrade if you have the stone, or buy none.</p>
+      <p><b>Workshop: invest stone in better tools.</b> Each level costs stone now and helps every year after. You may buy more than one upgrade if you have the stone, or buy none.</p>
       <div id="upgradeRows"></div>
       <p class="small">Upgrades apply from this year's results onward. Stone spent here cannot also be laid as pyramid progress this year.</p>
       <div class="btnrow"><button class="big" id="finishBtn">Finish this year</button></div>
@@ -226,7 +227,7 @@
     { id: "rest", label: "Rest the workers (+6 favour, no cost)",
       can: function(s){ return true; },
       apply: function(s){ s.favour += 6; },
-      fact: "Workers had days off, often tied to festivals. A rested crew worked better than one driven without a break — and a happy crew did not revolt." }
+      fact: "Workers had days off, often tied to festivals. A rested crew worked better than one driven without a break, and a happy crew did not revolt." }
   ];
   // One upgrade system: three tracks, two levels each. Each level
   // adds 25% to its area's output, permanently, from that year on.
@@ -358,14 +359,14 @@
     renderMilestones();
     $("log").innerHTML = S.log.map(function(l){ return "<li>" + l + "</li>"; }).join("");
     $("bestText").textContent = best
-      ? "Best so far: " + best.score + " points" + (best.won ? " — pyramid completed in year " + best.year + "." : " — pyramid not yet completed.")
+      ? "Best so far: " + best.score + " points" + (best.won ? ", pyramid completed in year " + best.year + "." : ", pyramid not yet completed.")
       : "No finished reign yet. Your best score will be kept here.";
   }
   function unlockMilestone(id){
     if (!S.milestones[id]){
       S.milestones[id] = true;
       var m = MILESTONES.filter(function(x){ return x.id === id; })[0];
-      if (m) S.log.unshift("Milestone: " + m.name + " — " + m.desc + ".");
+      if (m) S.log.unshift("Milestone: " + m.name + " (" + m.desc + ").");
     }
   }
   function checkMilestones(){
@@ -378,8 +379,10 @@
   }
   function renderMilestones(){
     $("milestoneList").innerHTML = MILESTONES.map(function(m){
-      return "<li class='" + (S.milestones[m.id] ? "done" : "") + "'>" +
-        (S.milestones[m.id] ? "✓ " : "○ ") + m.name + "</li>";
+      var done = !!S.milestones[m.id];
+      return "<li class='" + (done ? "done" : "") + "'>" +
+        (done ? "✓ " : "○ ") + m.name +
+        (done ? "<span class='msub'>" + m.desc + "</span>" : "") + "</li>";
     }).join("");
   }
   function milestoneNames(){
@@ -399,7 +402,7 @@
         "<button data-special='" + i + "'" + (ok ? "" : " disabled") + ">Choose</button>" +
         "<div class='desc'>" + a.fact + "</div></div>";
     });
-    html += "<div class='btnrow'><button class='secondary' id='specialSkip'>Save strength — no special action</button></div>";
+    html += "<div class='btnrow'><button class='secondary' id='specialSkip'>Save strength: no special action</button></div>";
     box.innerHTML = html;
     box.style.display = "";
     box.querySelectorAll("[data-special]").forEach(function(b){
@@ -428,7 +431,7 @@
       var lv = S.upgrades[u.key];
       var cost = lv >= 2 ? null : upgradeCost(lv);
       var ok = cost !== null && S.stone >= cost;
-      return "<div class='upg'><div><b>" + u.name + "</b> — level " + lv + " / 2</div>" +
+      return "<div class='upg'><div><b>" + u.name + "</b>, level " + lv + " / 2</div>" +
         "<button data-upgrade='" + u.key + "'" + (ok ? "" : " disabled") + ">" +
         (lv >= 2 ? "Maxed" : "Buy (" + cost + " stone)") + "</button>" +
         "<div class='desc'>" + u.desc + " " + u.effect + ".</div></div>";
@@ -468,7 +471,7 @@
     S.event = pool[rnd(pool.length)];
   }
   function showEvent(){
-    $("yearTitle").textContent = "Year " + S.year + " — The Nile rises";
+    $("yearTitle").textContent = "Year " + S.year + ": The Nile rises";
     $("floodText").innerHTML = "<b>" + S.flood.name + ".</b> " + S.flood.text;
     var box = $("eventBox");
     var html = "<h2>" + S.event.title + "</h2><p>" + S.event.text + "</p>";
@@ -505,7 +508,7 @@
         S.food = Math.max(0, S.food); S.favour = clamp(S.favour, 0, 100);
         clampAlloc();
         S.lastEvent = S.event.id;
-        S.log.unshift(S.event.title + " — see the fact above.");
+        S.log.unshift(S.event.title + ": see the fact above.");
         showSpecial();
       });
     }
@@ -533,6 +536,11 @@
         if (nv < 0 || total + d > S.workers) return;
         S.alloc[key] = nv;
         renderAlloc();
+        // Keep the stepper feeling instant: the re-render above replaces the
+        // buttons, so hand focus back to the one just tapped (keyboard users
+        // can keep tapping without re-finding it).
+        var again = rows.querySelector("button[data-alloc='" + key + "'][data-delta='" + d + "']");
+        if (again && !again.disabled){ try { again.focus({preventScroll:true}); } catch (e) { again.focus(); } }
       });
     });
   }
@@ -564,8 +572,8 @@
       "<p>" + reason + "</p>" +
       "<p>Pyramid: <b>" + Math.floor(S.progress) + "%</b> (" + stageName(S.progress) + ") · Food: " + S.food +
       " · Stone: " + S.stone + " · Workers: " + S.workers + " · Favour: " + S.favour + "</p>" +
-      "<p class='fact'><b>What this reign taught:</b> the flood set the harvest, the harvest fed the workers, the quarry fed the building, and festivals kept favour up. Neglect any one of them for long, and the pyramid stalls — no pharaoh, however grand, could out-order the Nile.</p>" +
-      "<p><b>Score: " + sc + "</b>" + (best && best.score === sc ? " — a new best!" : "") + "</p>" +
+      "<p class='fact'><b>What this reign taught:</b> the flood set the harvest, the harvest fed the workers, the quarry fed the building, and festivals kept favour up. Neglect any one of them for long, and the pyramid stalls. No pharaoh, however grand, could out-order the Nile.</p>" +
+      "<p><b>Score: " + sc + "</b>" + (best && best.score === sc ? ", a new best!" : "") + "</p>" +
       "<p><b>Milestones:</b> " + milestoneNames() + ".</p>" +
       "<div class='btnrow'><button id='playAgain2'>Play again</button></div>";
     $("playAgain2").addEventListener("click", resetGame);
@@ -586,7 +594,7 @@
     S.favour = clamp(Math.round(S.favour + a.temple * 0.4 - 5), 0, 100);
     var lines = [];
     lines.push("Flood: " + S.flood.name + ". Fields grew " + foodGrown + " food, workers ate " + eaten + ".");
-    lines.push("Quarry cut " + stoneCut + " stone. Builders laid " + built + " progress" + (built < buildCap ? " (held back by stone — send more workers to the quarry next year)." : "."));
+    lines.push("Quarry cut " + stoneCut + " stone. Builders laid " + built + " progress" + (built < buildCap ? " (held back by stone: send more workers to the quarry next year)." : "."));
     if (S.progress >= 100){
       lines.push("The capstone is set!");
     }
@@ -609,12 +617,12 @@
     box.style.display = "";
     var html = "<h2>Year " + S.year + " ends</h2><p>" + lines.join(" ") + "</p>";
     html += "<p class='fact'><b>Learn:</b> " + S.flood.fact + "</p>";
-    if (S.favour < 25 && !S.over) html += "<p class='warn'>Favour is low. The people are restless — send more workers to temple and festivals next year.</p>";
+    if (S.favour < 25 && !S.over) html += "<p class='warn'>Favour is low. The people are restless. Send more workers to temple and festivals next year.</p>";
     if (starved) html += "<p class='warn'>Your people went hungry. Keep more workers on the fields, especially after a low flood.</p>";
     if (S.progress >= 100){
       html += "<div class='btnrow'><button id='toEnd'>See the result</button></div>";
       box.innerHTML = html;
-      $("toEnd").addEventListener("click", function(){ endGame(true, "In year " + S.year + ", the capstone — the pyramidion — is set. The pyramid is complete."); });
+      $("toEnd").addEventListener("click", function(){ endGame(true, "In year " + S.year + ", the capstone, the pyramidion, is set. The pyramid is complete."); });
     } else if (S.favour <= 0){
       html += "<div class='btnrow'><button id='toEnd'>See the result</button></div>";
       box.innerHTML = html;
@@ -656,10 +664,10 @@
   $("finishBtn").addEventListener("click", resolveYear);
   $("againBtn").addEventListener("click", resetGame);
   $("copyBtn").addEventListener("click", function(){
-    var text = "Pyramid Builder: " + Math.floor(S.progress) + "% built (" + stageName(S.progress) + ") in year " +
+    var text = "My Pyramid Builder reign: " + Math.floor(S.progress) + "% built (" + stageName(S.progress) + ") in year " +
       S.year + " of 12. Food " + S.food + ", Stone " + S.stone + ", Workers " + S.workers + ", Favour " + S.favour +
       ". Milestones: " + milestoneNames() +
-      (S.over ? (S.won ? " — pyramid completed!" : " — reign ended.") : " — reign in progress.") +
+      (S.over ? (S.won ? ", pyramid completed!" : ", reign ended.") : ", reign in progress.") +
       " A George & Strider collab.";
     function done(msg){
       var old = $("copyBtn").textContent;
@@ -678,7 +686,7 @@
     S = newState();
     if (validReign(saved)){
       $("yearPanel").style.display = "none";
-      $("continueText").textContent = "Year " + saved.year + " of 12 — " +
+      $("continueText").textContent = "Year " + saved.year + " of 12, " +
         Math.floor(saved.progress) + "% built, Food " + saved.food +
         ", Stone " + saved.stone + ", Workers " + saved.workers +
         ", Favour " + saved.favour + ". Pick up where you left off.";
