@@ -271,7 +271,7 @@
       var done = false;
       for (var i = 0; i < keys.length; i++){
         if (sum <= S.workers) break;
-        if (S.alloc[keys[i]] >= 10){ S.alloc[keys[i]] -= 10; sum -= 10; done = true; }
+        if (S.alloc[keys[i]] >= 5){ S.alloc[keys[i]] -= 5; sum -= 5; done = true; }
       }
       if (!done) break;
     }
@@ -454,9 +454,9 @@
     rows.innerHTML = AREAS.map(function(a){
       var v = S.alloc[a.key];
       return "<div class='alloc'><div class='name'>" + a.name + "</div>" +
-        "<button data-alloc='" + a.key + "' data-delta='-10' " + (v <= 0 ? "disabled" : "") + ">−10</button>" +
+        "<button data-alloc='" + a.key + "' data-delta='-5' " + (v <= 0 ? "disabled" : "") + ">−5</button>" +
         "<div class='count'>" + v + "</div>" +
-        "<button data-alloc='" + a.key + "' data-delta='10' " + (S.workers - sum < 10 ? "disabled" : "") + ">+10</button>" +
+        "<button data-alloc='" + a.key + "' data-delta='5' " + (S.workers - sum < 5 ? "disabled" : "") + ">+5</button>" +
         "<div class='desc'>" + a.desc + "</div></div>";
     }).join("");
     rows.querySelectorAll("button").forEach(function(b){
