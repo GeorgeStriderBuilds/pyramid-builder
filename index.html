@@ -47,6 +47,9 @@
   .mile li{border:2px solid #b9972f;border-radius:20px;padding:6px 12px;font-size:13px;background:#f7ead0}
   .mile li.done{background:linear-gradient(#e8c766,#c9a227);font-weight:bold}
   .mile li .msub{display:block;font-size:12px;color:#6b4f1d;font-weight:normal}
+  .trials{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;margin:2px 0 4px;font-size:13px}
+  .trial{border:2px solid #b9972f;border-radius:16px;padding:3px 10px;background:#f7ead0;white-space:nowrap}
+  #godsBox h3{margin:14px 0 4px;font-size:18px;color:#7a5a12}
   .upg{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin:10px 0;padding:10px 0;border-top:1px solid #d9c49a}
   .upg:first-of-type{border-top:0}
   .upg .desc{grid-column:span 2;font-size:13px;color:#6b4f1d;margin-top:-6px}
@@ -76,6 +79,8 @@
     <div class="stat wide"><b id="stProgress">0% built</b><span>Pyramid progress</span><div class="bar"><i id="progBar" style="width:0%"></i></div></div>
   </div>
 
+  <div class="trials" id="trialsStrip" aria-label="Trials forecast"></div>
+
   <div class="pyramid" aria-label="Pyramid diagram">
     <div class="row cap" id="rowCap">Capstone</div>
     <div class="row casing" id="rowCasing">Casing</div>
@@ -99,6 +104,7 @@
       <p><b>Send your workers.</b> You have <b id="allocTotal">100</b> workers. Unassigned workers rest at home.</p>
       <div id="allocRows"></div>
       <p>Unassigned: <b id="allocLeft" aria-live="polite">0</b> workers</p>
+      <div id="godsBox"></div>
       <div class="btnrow"><button class="big" id="confirmBtn">Continue to workshop</button></div>
     </div>
     <div id="workshopBox" style="display:none">
@@ -240,6 +246,76 @@
       effect: "Fields: ×1.25 per level" }
   ];
   function upgradeCost(level){ return level === 0 ? 15 : 25; }
+  // Divine expansion: the pantheon, miracles, decrees, trials, and the capstone.
+  var GOD_ORDER = ["ra", "isis", "osiris", "seth"];
+  var GOD_NAMES = { ra: "Ra", isis: "Isis", osiris: "Osiris", seth: "Seth" };
+  function godName(g){ return GOD_NAMES[g] || g; }
+  function pleaseGod(g){
+    if (S.gods[g] === "Wroth") S.gods[g] = "Content";
+    else if (S.gods[g] === "Content") S.gods[g] = "Pleased";
+  }
+  function angerGod(g){
+    if (S.gods[g] === "Content") S.gods[g] = "Wroth";
+    else if (S.gods[g] === "Pleased") S.gods[g] = "Content";
+  }
+  function driftMoods(){
+    GOD_ORDER.forEach(function(g){
+      if (S.gods[g] === "Wroth") S.gods[g] = "Content";
+      else if (S.gods[g] === "Pleased") S.gods[g] = "Content";
+    });
+  }
+  function miracleCost(m){
+    var base = m.base, mood = S.gods[m.god];
+    if (mood === "Pleased") return Math.round(base * 0.75);
+    if (mood === "Wroth") return Math.round(base * 1.5);
+    return base;
+  }
+  var MIRACLES = [
+    { god: "ra", name: "Bless the Flood", desc: "Next year's flood will be at least Good.", base: 20,
+      apply: function(){ S.blessFlood = true; } },
+    { god: "isis", name: "Quell Dissent", desc: "Isis will calm the hungry if food runs short.", base: 15,
+      apply: function(){ S.quellDissent = true; } },
+    { god: "osiris", name: "Divine the Year", desc: "See next year's flood, event, and trials in truth.", base: 10,
+      apply: function(){ divineYear(); } },
+    { god: "seth", name: "Dark Bargain", desc: "Plus 30 stone now. Ra and Isis will be angered. No favour cost.", base: 0,
+      apply: function(){ S.stone += 30; angerGod("ra"); angerGod("isis"); pleaseGod("seth"); } }
+  ];
+  var DECREES = [
+    { id: "tithe", name: "Grain Tithe", desc: "Plus 20% food each year. Minus 3 favour each year.",
+      apply: function(){} },
+    { id: "levies", name: "Forced Levies", desc: "Plus 15 workers now, and workers grow 10% each year. But the levied may revolt.",
+      apply: function(){ S.workers += 15; } },
+    { id: "endowment", name: "Temple Endowment", desc: "Minus 20 stone now. Plus 4 favour each year.",
+      apply: function(){ S.stone = Math.max(0, S.stone - 20); } }
+  ];
+  var REVOLT_EVENT = { id: "revolt", title: "The levied grumble",
+    text: "Men taken by force do not sing at the ropes. Some talk of downing tools.",
+    fact: "Forced labour built much of Egypt, from canals to temples. Rations of bread and beer kept workers going, but overseers knew that hungry or angry crews worked badly.",
+    choices: [
+      { label: "Ease their burden (−8 food, +6 favour)", apply: function(s){ s.food -= 8; s.favour += 6; } },
+      { label: "Drive them harder (−5 favour, +8 stone)", apply: function(s){ s.favour -= 5; s.stone += 8; } }
+    ] };
+  var TRIAL_ICON = { locusts: "🦗", unrest: "🔥", lowflood: "🏜️" };
+  var TRIAL_DESC = { locusts: "locusts will strip 15 food", unrest: "unrest will cost 5 workers and 5 favour", lowflood: "the Nile will run low" };
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function genTrials(seed){
+    var t = {}, y, r, k;
+    for (y = 2; y <= 12; y++){
+      r = mulberry32(seed + y * 7919)();
+      if (r < 0.35){
+        k = Math.floor(mulberry32(seed + y * 104729)() * 3);
+        t[y] = ["locusts", "unrest", "lowflood"][k];
+      }
+    }
+    return t;
+  }
   var MILESTONES = [
     { id: "firstCourse", name: "First course laid", desc: "Pyramid progress above 0%" },
     { id: "halfBuilt", name: "Half the pyramid", desc: "Progress reaches 50%" },
@@ -258,7 +334,15 @@
   // phase "between" = a year just ended and the next has not begun yet.
   var REIGN_KEY = "pb-reign";
   function findFlood(name){ return FLOODS.filter(function(f){ return f.name === name; })[0] || null; }
-  function findEvent(id){ return EVENTS.filter(function(e){ return e.id === id; })[0] || null; }
+  function findEvent(id){ return EVENTS.filter(function(e){ return e.id === id; })[0] || (id === "revolt" ? REVOLT_EVENT : null); }
+  function validGods(g){
+    var out = { ra: "Content", isis: "Content", osiris: "Content", seth: "Content" }, k;
+    if (!g || typeof g !== "object") return out;
+    for (k in out){
+      if (g[k] === "Wroth" || g[k] === "Content" || g[k] === "Pleased") out[k] = g[k];
+    }
+    return out;
+  }
   function saveReign(phase){
     if (!S || S.over) return;
     save(REIGN_KEY, {
@@ -268,7 +352,10 @@
       lastEvent: S.lastEvent,
       floodName: S.flood ? S.flood.name : null,
       eventId: S.event ? S.event.id : null,
-      log: (S.log || []).slice(0, 12)
+      log: (S.log || []).slice(0, 12),
+      gods: S.gods, decree: S.decree, trialsSeed: S.trialsSeed, trials: S.trials,
+      tribute: !!S.tribute, blessFlood: !!S.blessFlood, quellDissent: !!S.quellDissent,
+      nextFloodName: S.nextFloodName || null, nextEventId: S.nextEventId || null
     });
   }
   function clearReign(){ try { localStorage.removeItem(REIGN_KEY); } catch (e) {} }
@@ -293,6 +380,18 @@
     });
     if (d.milestones) MILESTONES.forEach(function(m){ if (d.milestones[m.id]) S.milestones[m.id] = true; });
     S.lastEvent = d.lastEvent || null;
+    S.gods = validGods(d.gods);
+    S.decree = (d.decree === "tithe" || d.decree === "levies" || d.decree === "endowment") ? d.decree : null;
+    S.trialsSeed = (typeof d.trialsSeed === "number" && isFinite(d.trialsSeed)) ? d.trialsSeed : rnd(1000000000);
+    S.trials = (d.trials && typeof d.trials === "object") ? d.trials : genTrials(S.trialsSeed);
+    S.tribute = !!d.tribute;
+    S.blessFlood = !!d.blessFlood;
+    S.quellDissent = !!d.quellDissent;
+    S.nextFloodName = d.nextFloodName || null;
+    S.nextEventId = d.nextEventId || null;
+    S.miracleUsed = false;
+    S.trialNote = null;
+    S.divineText = null;
     S.log = (d.log || []).filter(function(l){ return typeof l === "string"; }).slice(0, 12);
     if (!S.log.length) S.log = ["Your reign continues."];
     if (d.phase === "start"){
@@ -313,12 +412,17 @@
 
   var S;
   function newState(){
+    var seed = rnd(1000000000);
     return {
       year: 1, food: 60, stone: 0, workers: 100, favour: 50, progress: 0,
       alloc: { fields: 40, quarry: 20, building: 30, temple: 10 },
       upgrades: { tools: 0, ramps: 0, irrigation: 0 },
-      milestones: {}, specialUsed: false,
+      milestones: {}, specialUsed: false, miracleUsed: false,
       flood: null, event: null, lastEvent: null, over: false, won: false,
+      gods: { ra: "Content", isis: "Content", osiris: "Content", seth: "Content" },
+      decree: null, trialsSeed: seed, trials: genTrials(seed),
+      tribute: false, blessFlood: false, quellDissent: false,
+      nextFloodName: null, nextEventId: null, trialNote: null, divineText: null,
       log: ["Your reign begins. The pyramid site is marked out on the west bank."]
     };
   }
@@ -357,6 +461,7 @@
     $("rowCasing").className = "row casing" + (S.progress >= 75 ? " on" : "");
     $("rowCap").className = "row cap" + (S.progress >= 100 ? " on" : "");
     renderMilestones();
+    renderTrials();
     $("log").innerHTML = S.log.map(function(l){ return "<li>" + l + "</li>"; }).join("");
     $("bestText").textContent = best
       ? "Best so far: " + best.score + " points" + (best.won ? ", pyramid completed in year " + best.year + "." : ", pyramid not yet completed.")
@@ -388,6 +493,19 @@
   function milestoneNames(){
     var names = MILESTONES.filter(function(m){ return S.milestones[m.id]; }).map(function(m){ return m.name; });
     return names.length ? names.join(", ") : "none yet";
+  }
+  function renderTrials(){
+    var el = $("trialsStrip");
+    if (!el) return;
+    if (S.over){ el.innerHTML = ""; return; }
+    var tr = S.trials || {}, parts = [], y, t;
+    for (y = S.year + 1; y <= Math.min(S.year + 3, 12); y++){
+      t = tr[y];
+      if (t) parts.push("<span class='trial'>" + TRIAL_ICON[t] + " yr " + y + "</span>");
+    }
+    el.innerHTML = parts.length
+      ? "<b>Trials ahead:</b> " + parts.join(" ") + " <span class='small'>🦗 locusts · 🔥 unrest · 🏜️ low flood</span>"
+      : "<b>Trials ahead:</b> <span class='small'>the horizon is clear</span>";
   }
   function showSpecial(){
     $("eventBox").style.display = "none";
@@ -468,11 +586,13 @@
   function pickEvent(){
     if (S.year === 1){ S.event = EVENTS[0]; return; }
     var pool = EVENTS.filter(function(e){ return e.id !== S.lastEvent && e.id !== "opet"; });
+    if (S.decree === "levies") pool.push(REVOLT_EVENT);
     S.event = pool[rnd(pool.length)];
   }
   function showEvent(){
     $("yearTitle").textContent = "Year " + S.year + ": The Nile rises";
-    $("floodText").innerHTML = "<b>" + S.flood.name + ".</b> " + S.flood.text;
+    $("floodText").innerHTML = "<b>" + S.flood.name + ".</b> " + S.flood.text +
+      (S.trialNote ? " <span class='warn'>" + S.trialNote + "</span>" : "");
     var box = $("eventBox");
     var html = "<h2>" + S.event.title + "</h2><p>" + S.event.text + "</p>";
     html += "<p class='fact'><b>Learn:</b> " + S.event.fact + "</p>";
@@ -551,7 +671,78 @@
     $("allocBox").style.display = "";
     $("resultBox").style.display = "none";
     renderAlloc();
+    renderGods();
     renderStats();
+  }
+  function moodLine(){
+    return "<p class='small'>Moods: " + GOD_ORDER.map(function(g){ return godName(g) + " " + S.gods[g]; }).join(" · ") + ". Buying a miracle pleases that god. If the price is beyond your favour, the temples will collect their due.</p>";
+  }
+  function renderGods(){
+    var box = $("godsBox");
+    var html = "<h3>Consult the gods</h3>";
+    if (S.miracleUsed){
+      html += "<p class='small'>The gods have spoken this year." + (S.divineText ? " " + S.divineText : "") + "</p>" + moodLine();
+      box.innerHTML = html;
+      return;
+    }
+    html += "<p class='small'>One miracle per year.</p>" + moodLine();
+    MIRACLES.forEach(function(m, i){
+      var cost = miracleCost(m);
+      html += "<div class='upg'><div><b>" + m.name + "</b> <span class='small'>" + godName(m.god) + ", " + S.gods[m.god] + "</span><br><span class='small'>" + m.desc + "</span></div>" +
+        "<button data-miracle='" + i + "'>" + (cost > 0 ? cost + " favour" : "Take it") + "</button></div>";
+    });
+    box.innerHTML = html;
+    box.querySelectorAll("[data-miracle]").forEach(function(b){
+      b.addEventListener("click", function(){
+        buyMiracle(parseInt(b.getAttribute("data-miracle"), 10));
+      });
+    });
+  }
+  function buyMiracle(i){
+    if (S.miracleUsed || S.over) return;
+    var m = MIRACLES[i];
+    if (!m) return;
+    var cost = miracleCost(m);
+    S.miracleUsed = true;
+    if (cost > S.favour){
+      S.favour = 0;
+      S.tribute = true;
+      S.log.unshift("The temples grant " + m.name + ", but the price is beyond your favour. They will collect their due.");
+    } else {
+      S.favour -= cost;
+    }
+    S.favour = clamp(S.favour, 0, 100);
+    if (m.god !== "seth") pleaseGod(m.god);
+    m.apply(S);
+    S.log.unshift("Miracle: " + m.name + " (" + godName(m.god) + ").");
+    renderGods();
+    renderStats();
+  }
+  function peekNextFlood(){
+    var r = Math.random();
+    var f = r < 0.25 ? FLOODS[0] : (r < 0.75 ? FLOODS[1] : FLOODS[2]);
+    if ((S.trials || {})[S.year + 1] === "lowflood") f = FLOODS[0];
+    if (S.blessFlood && f === FLOODS[0]) f = FLOODS[1];
+    return f;
+  }
+  function peekNextEvent(){
+    var pool = EVENTS.filter(function(e){ return e.id !== S.lastEvent && e.id !== "opet"; });
+    if (S.decree === "levies") pool = pool.concat([REVOLT_EVENT]);
+    return pool[rnd(pool.length)];
+  }
+  function divineYear(){
+    var nf = peekNextFlood();
+    var ne = peekNextEvent();
+    S.nextFloodName = nf.name;
+    S.nextEventId = ne.id;
+    var parts = ["Osiris lifts the veil. Next year brings a " + nf.name.toLowerCase() + ", and then: " + ne.title + "."];
+    var td = [], y, t, tr = S.trials || {};
+    for (y = S.year + 1; y <= Math.min(S.year + 3, 12); y++){
+      t = tr[y];
+      if (t) td.push("year " + y + ", " + TRIAL_DESC[t]);
+    }
+    parts.push(td.length ? "The trials ahead, seen in truth: " + td.join("; ") + "." : "No trials darken the near horizon.");
+    S.divineText = parts.join(" ");
   }
   function score(){
     var s = Math.round(S.progress + S.food * 0.5 + S.favour + (S.won ? (13 - S.year) * 10 : 0));
@@ -583,8 +774,13 @@
   function resolveYear(){
     var a = S.alloc;
     var foodGrown = Math.round(a.fields * 0.5 * S.flood.factor * (1 + 0.25 * S.upgrades.irrigation));
+    if (S.decree === "tithe") foodGrown = Math.round(foodGrown * 1.2);
     var eaten = Math.round(S.workers * 0.15);
     var stoneCut = Math.round(a.quarry * 0.4 * (1 + 0.25 * S.upgrades.tools));
+    if (S.tribute){
+      foodGrown = Math.round(foodGrown * 0.8);
+      stoneCut = Math.round(stoneCut * 0.8);
+    }
     var stoneTotal = S.stone + stoneCut;
     var buildCap = Math.round(a.building * 0.3 * (1 + 0.25 * S.upgrades.ramps));
     var built = Math.min(buildCap, stoneTotal);
@@ -592,22 +788,35 @@
     S.stone = stoneTotal - built;
     S.progress = Math.min(100, S.progress + built);
     S.favour = clamp(Math.round(S.favour + a.temple * 0.4 - 5), 0, 100);
+    if (S.decree === "tithe") S.favour = clamp(S.favour - 3, 0, 100);
+    if (S.decree === "endowment") S.favour = clamp(S.favour + 4, 0, 100);
     var lines = [];
     lines.push("Flood: " + S.flood.name + ". Fields grew " + foodGrown + " food, workers ate " + eaten + ".");
     lines.push("Quarry cut " + stoneCut + " stone. Builders laid " + built + " progress" + (built < buildCap ? " (held back by stone: send more workers to the quarry next year)." : "."));
+    if (S.tribute){
+      lines.push("The temples collect their due: harvest and quarry yield less.");
+      S.tribute = false;
+    }
     if (S.progress >= 100){
       lines.push("The capstone is set!");
     }
     var starved = false;
     if (S.food < 0){
       S.food = 0; starved = true;
-      S.workers = Math.max(0, S.workers - 10);
       S.favour = Math.max(0, S.favour - 15);
-      lines.push("Food ran out. Workers leave and favour falls.");
+      if (S.quellDissent){
+        S.quellDissent = false;
+        lines.push("Food ran out, but Isis calms the hungry: no workers leave. Favour still falls.");
+      } else {
+        S.workers = Math.max(0, S.workers - 10);
+        lines.push("Food ran out. Workers leave and favour falls.");
+      }
     }
     if (S.flood.name === "Low flood" && !starved) unlockMilestone("floodSurvivor");
     checkMilestones();
     clampAlloc();
+    if (S.decree === "levies") S.workers = Math.round(S.workers * 1.10);
+    driftMoods();
     S.log = lines.concat(S.log).slice(0, 12);
     $("eventBox").style.display = "none";
     $("specialBox").style.display = "none";
@@ -632,9 +841,7 @@
       box.innerHTML = html;
       $("toEnd").addEventListener("click", function(){ endGame(false, "There are no workers left to raise the pyramid."); });
     } else if (S.year >= 12){
-      html += "<div class='btnrow'><button id='toEnd'>See the result</button></div>";
-      box.innerHTML = html;
-      $("toEnd").addEventListener("click", function(){ endGame(false, "Twelve years pass and the pyramid is only " + Math.floor(S.progress) + "% built. Your successor inherits an unfinished mountain."); });
+      showCapstone(lines);
     } else {
       S.year += 1;
       saveReign("between");
@@ -644,13 +851,111 @@
     }
     renderStats();
   }
+  function showCapstone(lines){
+    $("eventBox").style.display = "none";
+    $("specialBox").style.display = "none";
+    $("allocBox").style.display = "none";
+    $("workshopBox").style.display = "none";
+    var box = $("resultBox");
+    box.style.display = "";
+    var wroth = GOD_ORDER.filter(function(g){ return S.gods[g] === "Wroth"; });
+    var html = "<h2>The capstone awaits</h2><p>" + lines.join(" ") + "</p>";
+    html += "<p>Twelve years of toil rise behind you. The pyramidion, the capstone, waits to be set. The priests gather. Will you trust to mortal hands, or stake favour for the blessing of the gods?</p>";
+    html += "<p>Pyramid: <b>" + Math.floor(S.progress) + "%</b> · Favour: <b>" + S.favour + "</b>.</p>";
+    if (wroth.length) html += "<p class='warn'>The wroth turn their faces away: " + wroth.map(godName).join(", ") + ". A great stake may end in humiliation.</p>";
+    html += "<div class='btnrow'><button data-stake='0'>Mortal hands (no stake)</button>" +
+      "<button data-stake='15'" + (S.favour < 15 ? " disabled" : "") + ">Stake 15 favour</button>" +
+      "<button data-stake='30'" + (S.favour < 30 ? " disabled" : "") + ">Stake 30 favour</button></div>";
+    box.innerHTML = html;
+    box.querySelectorAll("[data-stake]").forEach(function(b){
+      b.addEventListener("click", function(){ resolveCapstone(parseInt(b.getAttribute("data-stake"), 10)); });
+    });
+    renderStats();
+  }
+  function resolveCapstone(stake){
+    if (S.over) return;
+    S.favour = Math.max(0, S.favour - stake);
+    var wroth = GOD_ORDER.filter(function(g){ return S.gods[g] === "Wroth"; });
+    var text;
+    if (stake > 0 && wroth.length > 0 && Math.random() < 0.35){
+      var g = wroth[rnd(wroth.length)];
+      S.progress = Math.max(0, S.progress - 5);
+      text = "You stake " + stake + " favour, but the wroth " + godName(g) + " turns a cold face. A rope snaps. The scaffolding groans. The priests shake their heads, and the capstone slips back: 5 progress lost to humiliation.";
+    } else {
+      var surge = stake === 0 ? 0 : (stake === 15 ? 3 + rnd(6) : 8 + rnd(8));
+      S.progress = Math.min(100, S.progress + surge);
+      text = stake === 0
+        ? "With mortal hands alone the capstone is raised, stone by groaning stone."
+        : "The gods breathe on the stone. Ropes hold, ramps sing, and the pyramidion rises " + surge + " progress in a single shining day.";
+    }
+    S.log.unshift("The capstone: " + text);
+    renderStats();
+    if (S.progress >= 100){
+      endGame(true, text + " In year 12, the capstone is set. The pyramid is complete, and your name is written in stone forever.");
+    } else {
+      endGame(false, text + " Twelve years pass and the pyramid stands at " + Math.floor(S.progress) + "%. Your successor inherits an unfinished mountain.");
+    }
+  }
+  function applyTrialEffects(){
+    var t = (S.trials || {})[S.year];
+    S.trialNote = null;
+    if (!t) return;
+    if (t === "lowflood"){
+      S.flood = FLOODS[0];
+      S.trialNote = "The priests warned of a meagre inundation: the Nile runs low.";
+    } else if (t === "locusts"){
+      S.food = Math.max(0, S.food - 15);
+      S.trialNote = "Locusts strip the fields: 15 food lost.";
+    } else if (t === "unrest"){
+      S.workers = Math.max(20, S.workers - 5);
+      S.favour = Math.max(0, S.favour - 5);
+      S.trialNote = "Unrest in the workers' camp: 5 workers leave, favour falls.";
+    }
+    S.log.unshift("Trial: " + S.trialNote);
+  }
+  function showDecree(){
+    $("yearTitle").textContent = "Year 6: A royal decree";
+    var box = $("eventBox");
+    var html = "<h2>The coronation festival</h2><p>Six years have passed. At the coronation festival the court awaits your decree. It will shape the rest of your reign. Choose one.</p>";
+    DECREES.forEach(function(d, i){
+      html += "<div class='upg'><div><b>" + d.name + "</b><br><span class='small'>" + d.desc + "</span></div>" +
+        "<button data-decree='" + i + "'>Decree</button></div>";
+    });
+    box.innerHTML = html;
+    box.style.display = "";
+    $("allocBox").style.display = "none";
+    $("resultBox").style.display = "none";
+    box.querySelectorAll("[data-decree]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var d = DECREES[parseInt(b.getAttribute("data-decree"), 10)];
+        S.decree = d.id;
+        d.apply();
+        S.log.unshift("Royal decree: " + d.name + ". It will shape the rest of the reign.");
+        beginYearAfterDecree();
+      });
+    });
+    renderStats();
+  }
+  function beginYearAfterDecree(){
+    if (S.nextFloodName){ S.flood = findFlood(S.nextFloodName) || FLOODS[1]; S.nextFloodName = null; }
+    else { drawFlood(); }
+    applyTrialEffects();
+    if (S.blessFlood){
+      if (S.flood === FLOODS[0]) S.flood = FLOODS[1];
+      S.blessFlood = false;
+    }
+    if (S.nextEventId){ S.event = findEvent(S.nextEventId) || null; S.nextEventId = null; }
+    if (!S.event) pickEvent();
+    saveReign("start");
+    showEvent();
+  }
   function startYear(){
     if (S.over) return;
     S.specialUsed = false;
-    drawFlood();
-    pickEvent();
-    saveReign("start");
-    showEvent();
+    S.miracleUsed = false;
+    S.divineText = null;
+    if (S.year === 6 && !S.decree){ showDecree(); return; }
+    beginYearAfterDecree();
   }
   function resetGame(){
     clearReign();
@@ -664,8 +969,13 @@
   $("finishBtn").addEventListener("click", resolveYear);
   $("againBtn").addEventListener("click", resetGame);
   $("copyBtn").addEventListener("click", function(){
+    var decreeName = "";
+    if (S.decree){
+      var dd = DECREES.filter(function(x){ return x.id === S.decree; })[0];
+      if (dd) decreeName = ", decree: " + dd.name;
+    }
     var text = "My Pyramid Builder reign: " + Math.floor(S.progress) + "% built (" + stageName(S.progress) + ") in year " +
-      S.year + " of 12. Food " + S.food + ", Stone " + S.stone + ", Workers " + S.workers + ", Favour " + S.favour +
+      S.year + " of 12" + decreeName + ". Food " + S.food + ", Stone " + S.stone + ", Workers " + S.workers + ", Favour " + S.favour +
       ". Milestones: " + milestoneNames() +
       (S.over ? (S.won ? ", pyramid completed!" : ", reign ended.") : ", reign in progress.") +
       " A George & Strider collab.";
